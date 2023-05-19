@@ -10,8 +10,11 @@ import UIKit
 
 class SelectionViewController: UITableViewController {
     var items = [String]() // this is the array that will store the filenames to load
+    var images: [UIImage?] = [UIImage]()
+    
 //    var viewControllers = [UIViewController]() // create a cache of the detail view controllers for faster loading
     var dirty = false
+    var finishedLoadingImages = false
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -22,15 +25,9 @@ class SelectionViewController: UITableViewController {
         tableView.separatorStyle = .none
         tableView.register(UITableViewCell.self, forCellReuseIdentifier: "Cell")
 
-        // load all the JPEGs into our array
-        let fm = FileManager.default
-
-        if let tempItems = try? fm.contentsOfDirectory(atPath: Bundle.main.resourcePath!) {
-            for item in tempItems {
-                if item.range(of: "Large") != nil {
-                    items.append(item)
-                }
-            }
+        // Challenge 3
+        DispatchQueue.global().async { [weak self] in
+            self?.loadImages()
         }
     }
 
@@ -42,6 +39,72 @@ class SelectionViewController: UITableViewController {
             tableView.reloadData()
         }
     }
+    
+    // Challenge 3
+    func loadImages() {
+        // load all the JPEGs into our array
+        let fm = FileManager.default
+
+        if let tempItems = try? fm.contentsOfDirectory(atPath: Bundle.main.resourcePath!) {
+            for item in tempItems {
+                if item.range(of: "Large") != nil {
+                    items.append(item)
+                    
+                    if let image = loadFromCache(name: item) {
+                        images.append(image)
+                    } else {
+                        images.append(createThumbnail(currentImage: item))
+                    }
+                }
+            }
+        }
+        
+        finishedLoadingImages = true
+        tableView.performSelector(onMainThread: #selector(UITableView.reloadData), with: nil, waitUntilDone: false)
+    }
+    
+    // Challenge 3
+    func loadFromCache(name: String) -> UIImage? {
+        let path = getDocumentsDirectory().appendingPathExtension(name)
+        return UIImage(contentsOfFile: path.path)
+    }
+    
+    // Challenge 3
+    func saveToCache(name: String, image: UIImage){
+        let imagePath = getDocumentsDirectory().appendingPathExtension(name)
+        if let pngData = image.pngData() {
+            try? pngData.write(to: imagePath)
+        }
+    }
+    
+    // Challenge 3
+    func getDocumentsDirectory() -> URL {
+        let path = FileManager.default.urls(for: .documentDirectory, in: .userDomainMask)
+        return path[0]
+    }
+    
+    // Challenge 3
+    func createThumbnail(currentImage: String) -> UIImage? {
+        // find the image for this cell, and load its thumbnail
+        let imageRootName = currentImage.replacingOccurrences(of: "Large", with: "Thumb")
+        
+        // Challenge 1
+        guard let path = Bundle.main.path(forResource: imageRootName, ofType: nil) else { return nil }
+        guard let original = UIImage(contentsOfFile: path) else { return nil }
+
+        let renderRect = CGRect(origin: CGPoint.zero, size: CGSize(width: 90, height: 90))
+        let renderer = UIGraphicsImageRenderer(size: renderRect.size)
+
+        let rounded = renderer.image { ctx in
+            ctx.cgContext.addEllipse(in: renderRect)
+            ctx.cgContext.clip()
+
+            original.draw(in: renderRect)
+        }
+        
+        return rounded
+
+    }
 
     // MARK: - Table view data source
 
@@ -52,6 +115,10 @@ class SelectionViewController: UITableViewController {
 
     override func tableView(_ tableView: UITableView, numberOfRowsInSection section: Int) -> Int {
         // Return the number of rows in the section.
+        if !finishedLoadingImages {
+            return 0
+        }
+        
         return items.count * 10
     }
 
@@ -65,25 +132,12 @@ class SelectionViewController: UITableViewController {
 //        }
         
         let cell = tableView.dequeueReusableCell(withIdentifier: "Cell", for: indexPath)
-
-        // find the image for this cell, and load its thumbnail
-        let currentImage = items[indexPath.row % items.count]
-        let imageRootName = currentImage.replacingOccurrences(of: "Large", with: "Thumb")
         
-        guard let path = Bundle.main.path(forResource: imageRootName, ofType: nil) else { return cell }
-        guard let original = UIImage(contentsOfFile: path) else { return cell }
-
+        // Challenge 3
+        let index = indexPath.row % items.count
+        cell.imageView?.image = images[index]
+        
         let renderRect = CGRect(origin: CGPoint.zero, size: CGSize(width: 90, height: 90))
-        let renderer = UIGraphicsImageRenderer(size: renderRect.size)
-
-        let rounded = renderer.image { ctx in
-            ctx.cgContext.addEllipse(in: renderRect)
-            ctx.cgContext.clip()
-
-            original.draw(in: renderRect)
-        }
-
-        cell.imageView?.image = rounded
 
         // give the images a nice shadow to make them look a bit more dramatic
         cell.imageView?.layer.shadowColor = UIColor.black.cgColor
@@ -94,7 +148,7 @@ class SelectionViewController: UITableViewController {
 
         // each image stores how often it's been tapped
         let defaults = UserDefaults.standard
-        cell.textLabel?.text = "\(defaults.integer(forKey: currentImage))"
+        cell.textLabel?.text = "\(defaults.integer(forKey: items[index]))"
 
         return cell
     }

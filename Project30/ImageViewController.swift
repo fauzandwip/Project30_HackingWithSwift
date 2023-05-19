@@ -48,9 +48,12 @@ class ImageViewController: UIViewController {
     override func viewDidLoad() {
         super.viewDidLoad()
 
+        // Challenge 1
         guard let image else { return }
         
         title = image.replacingOccurrences(of: "-Large.jpg", with: "")
+        
+        // Challenge 1
         guard let path = Bundle.main.path(forResource: image, ofType: nil) else { return }
         guard let original = UIImage(contentsOfFile: path) else { return }
 
@@ -83,7 +86,9 @@ class ImageViewController: UIViewController {
     }
 
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
+        // Challenge 1
         guard let image else { return }
+        
         let defaults = UserDefaults.standard
         var currentVal = defaults.integer(forKey: image)
         currentVal += 1
